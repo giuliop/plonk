@@ -1,0 +1,4 @@
+A simple implementation of KZG commitment scheme.
+It relies on:
+    * py_ecc for elliptic curve operations
+    * sympy for polynomial operations
