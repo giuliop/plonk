@@ -3,9 +3,11 @@ An implementation of the KZG polynomial commitment scheme.
 We use the py_ecc library for the elliptic curve operations.
 """
 
+import hashlib
 import secrets
+
+import sympy
 from py_ecc.optimized_bn128 import optimized_curve as curve, pairing
-from sympy import Poly as sympy_Poly, symbols as sympy_symbols, FF as sympy_FF
 
 def trusted_setup(d):
     """Generate the trusted setup for a polynomial commitment scheme.
@@ -74,14 +76,14 @@ def poly_at(poly, x):
     return sum(coeff * x**(degree - i)
                for i, coeff in enumerate(poly)) % curve.curve_order
 
-def evaluate(poly, h, u):
+def evaluate(poly, u, h):
     """Open a polynomial at a point.
 
     Args:
         poly: The polynomial to evaluate as a list of coefficients,
               starting with the highest degree term.
-        h: parameters of the trusted setup
         u: The point to evaluate the polynomial at.
+        h: parameters of the trusted setup
 
     Returns:
         A tuple (v = poly(u), proof) where proof is an element of G1
@@ -95,6 +97,31 @@ def evaluate(poly, h, u):
 
     proof = commit(q_x, h)
     return v, proof
+
+def batch_evaluate(polys, u, r, h):
+    """Open multiple polynomials at the same point.
+
+    Args:
+        polys: A list of polynomials to evaluate.
+        u: The point to evaluate the polynomials at.
+        r: A random parameter
+        h: parameters of the trusted setup
+
+    Returns:
+        A tuple (vs, proof) where vs is a list of the values of the
+        polynomials at u, and proof is an element of G1 to be used
+        in the batch_verify function.
+    """
+    vs = [poly_at(poly, u) for poly in polys]
+
+    # calculate the polynomial h(x) such that:
+    # h(x) = sum( r^i * (polys[i](x) - polys[i](u)) / (x - u) )
+    # for i in 0, len(polys)
+    h_x = calculate_h_x(polys, u, r)
+
+    proof = commit(h_x, h)
+
+    return vs, proof
 
 def verify(com_f, u, v, proof, h):
     """Verify an evaluation proof.
@@ -110,8 +137,8 @@ def verify(com_f, u, v, proof, h):
         True if the proof is valid, False otherwise.
     """
     g1 = h[0][0]
-
     g2 = h[1][0]
+
     left = pairing(g2,
                    curve.add(com_f,
                              curve.multiply(curve.neg(g1), v)))
@@ -121,6 +148,38 @@ def verify(com_f, u, v, proof, h):
                     proof)
 
     return left == right
+
+def batch_verify(com_fs, u, vs, r, proof, h):
+    """Verify a batch evaluation proof for multiple polys and
+    the same evaluation point for all.
+
+    Args:
+        com_fs: The commitments to the polynomials.
+        u: The point to evaluate the polynomials at.
+        vs: The list of the values of the polynomials at u.
+        r: A random parameter
+        proof: The proof of the evaluation.
+        h: parameters of the trusted setup
+
+    Returns:
+        True if the proof is valid, False otherwise.
+    """
+    g1 = h[0][0]
+    g2 = h[1][0]
+
+    F = curve.Z1 # Zero element of G1
+    for i, com_f in enumerate(com_fs):
+        F = curve.add(F, curve.multiply(com_f, r**i))
+
+    s = curve.multiply(g1, sum(v * r**i for i,v in enumerate(vs)))
+
+    e1 = pairing(g2, curve.add(F, curve.neg(s)))
+
+    e2 = pairing(curve.add(h[1][1],
+                              curve.multiply(curve.neg(g2), u)),
+                    curve.neg(proof))
+
+    return e1 * e2 == curve.FQ12.one()
 
 def calculate_q_x(poly, u):
     """Calculate the polynomial q(x) such that:
@@ -135,32 +194,102 @@ def calculate_q_x(poly, u):
         A list of coefficients of the polynomial q(x),
         starting with the highest degree term.
     """
-    x = sympy_symbols('x')
-    domain = sympy_FF(curve.curve_order)
-    # domain = None
+    x = sympy.symbols('x')
+    domain = sympy.FF(curve.curve_order)
 
-    f_x = sympy_Poly(poly, x, domain=domain)
+    f_x = sympy.Poly(poly, x, domain=domain)
     f_u = f_x.subs(x, u)
     g_x = f_x - f_u
 
-    q_x, remainder = g_x.div(sympy_Poly(x - u, x, domain=domain))
+    q_x, remainder = g_x.div(sympy.Poly(x - u, x, domain=domain))
     assert remainder % curve.curve_order == 0
 
     return [x % curve.curve_order for x in q_x.all_coeffs()]
 
-def test_kzg():
-    """Test the KZG polynomial commitment scheme."""
+def calculate_h_x(polys, u, r):
+    """Calculate the polynomial h(x) such that:
+       h(x) = sum( r^i * (polys[i](x) - polys[i](u)) / (x - u) )
+       for i in 0, len(polys).
+
+    Args:
+        polys: A list of polynomials to evaluate.
+        u: The point to evaluate the polynomials at.
+        r: A random parameter
+
+    Returns:
+        A list of coefficients of the polynomial h(x),
+        starting with the highest degree term.
+    """
+    x = sympy.symbols('x')
+    domain = sympy.FF(curve.curve_order)
+
+    h_x = sympy.Poly(0, x, domain=domain)
+    for i, poly in enumerate(polys):
+        f_x = sympy.Poly(poly, x, domain=domain)
+        f_u = f_x.subs(x, u)
+        g_x = f_x - f_u
+
+        q_x, remainder = g_x.div(sympy.Poly(x - u, x, domain=domain))
+        assert remainder % curve.curve_order == 0
+
+        h_x = h_x + r**i * q_x
+
+    return [x % curve.curve_order for x in h_x.all_coeffs()]
+
+def hash_to_field(data, p):
+    """Hashes data and reduces it modulo p.
+
+    Args:
+        data: The data to hash.
+        p: The prime number to reduce the hash to.
+
+    Returns:
+        An integer modulo p.
+    """
+    # TODO: use a proper serialization format
+    serialized_data = str(data).encode('utf-8')
+    hasher = hashlib.blake2b(serialized_data)
+    digest_bytes = hasher.digest()
+
+    digest_int = int.from_bytes(digest_bytes, 'big')
+    return digest_int % p
+
+def test_single_commit():
+    """Test the KZG polynomial commitment scheme for one poly, one value to open."""
     d = secrets.randbelow(100)
     h = trusted_setup(d)
 
     poly = random_poly(d)
     com_f = commit(poly, h)
 
-    u = secrets.randbelow(curve.curve_order-1) + 1
-    v, proof = evaluate(poly, h, u)
+    # the point to evaluate the polynomial at
+    u = hash_to_field(com_f, curve.curve_order)
+
+    v, proof = evaluate(poly, u, h)
 
     assert verify(com_f, u, v, proof, h)
     print("It works!")
 
+def test_multi_poly_single_value_commit():
+    """Test the KZG polynomial commitment scheme for multiple polys,
+    same value for all polys to open."""
+    d = secrets.randbelow(100)
+    h = trusted_setup(d)
+
+    polys_count = 10
+    polys = [random_poly(d) for _ in range(polys_count)]
+    com_fs = [commit(poly, h) for poly in polys]
+
+    # the point to evaluate the polynomials at
+    u = hash_to_field(com_fs, curve.curve_order)
+    # a random parameter
+    r = hash_to_field(u, curve.curve_order)
+
+    vs, proof = batch_evaluate(polys, u, r, h)
+
+    assert batch_verify(com_fs, u, vs, r, proof, h)
+    print("It works!")
+
 if __name__ == "__main__":
-    test_kzg()
+    test_single_commit()
+    test_multi_poly_single_value_commit()
