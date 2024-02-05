@@ -315,11 +315,11 @@ def calculate_h_x(polys, u, r):
 
     return [x % curve.curve_order for x in h_x.all_coeffs()]
 
-def hash_to_field(data, p):
+def fiat_shamir(data, p):
     """Hashes data and reduces it modulo p.
 
     Args:
-        data: The data to hash.
+        data: The data to hash as a list.
         p: The prime number to reduce the hash to.
 
     Returns:
@@ -342,12 +342,11 @@ def test_single_commit():
     com_f = commit(poly, h)
 
     # the point to open the polynomial at
-    u = hash_to_field(com_f, curve.curve_order)
+    u = fiat_shamir([com_f, h], curve.curve_order)
 
     v, proof = single_open(poly, u, h)
 
     assert single_verify(com_f, u, v, proof, h)
-    print("It works!")
 
 def test_multi_poly_single_value_commit():
     """Test the KZG polynomial commitment scheme for multiple polys,
@@ -360,14 +359,13 @@ def test_multi_poly_single_value_commit():
     com_fs = [commit(poly, h) for poly in polys]
 
     # the point to open the polynomials at
-    u = hash_to_field(com_fs, curve.curve_order)
+    u = fiat_shamir([com_fs, h], curve.curve_order)
     # a random parameter
-    r = hash_to_field(u, curve.curve_order)
+    r = fiat_shamir([u], curve.curve_order)
 
     vs, proof = batch_open(polys, u, r, h)
 
     assert batch_verify(com_fs, u, vs, r, proof, h)
-    print("It works!")
 
 def test_multi_poly_multi_value_commit():
     """Test the KZG polynomial commitment scheme for multiple polys,
@@ -390,23 +388,23 @@ def test_multi_poly_multi_value_commit():
 
     # the points to open the polynomials at
     us = []
-    to_hash = com_fs_groups
+    to_hash = [com_fs_groups, h]
     for _ in range(values_count):
-        to_hash = hash_to_field(to_hash, curve.curve_order)
+        to_hash = fiat_shamir([to_hash], curve.curve_order)
         us.append(to_hash)
 
     # random parameters
     rs = []
     for _ in range(values_count):
-        to_hash = hash_to_field(to_hash, curve.curve_order)
+        to_hash = fiat_shamir([to_hash], curve.curve_order)
         rs.append(to_hash)
 
     vs_groups, proofs = batch_multi_open(polys_groups, us, rs, h)
 
     assert batch_multi_verify(com_fs_groups, us, vs_groups, rs, proofs, h)
-    print("It works!")
 
 if __name__ == "__main__":
     test_single_commit()
     test_multi_poly_single_value_commit()
     test_multi_poly_multi_value_commit()
+    print("All tests passed!")
