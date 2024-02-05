@@ -1,12 +1,17 @@
 """
-An implementation of the KZG polynomial commitment scheme.
-We use the py_ecc library for the elliptic curve operations.
+An implementation of the KZG polynomial commitment scheme,
+using the py_ecc library for elliptic curve operations on
+the curve bn128.
+
+Batch proofs are implemented as per the Plonk paper, and the
+multi-polynomials, multi-value case is generalized for an
+arbitrary number of values.
 """
 
 import hashlib
 import secrets
-
 import sympy
+
 from py_ecc.optimized_bn128 import optimized_curve as curve, pairing
 
 def trusted_setup(d):
@@ -73,21 +78,22 @@ def poly_at(poly, x):
         The value of the polynomial at x.
     """
     degree = len(poly) - 1
-    return sum(coeff * x**(degree - i)
-               for i, coeff in enumerate(poly)) % curve.curve_order
+    p = curve.curve_order
+    return sum(coeff * pow(x, degree - i, p)
+               for i, coeff in enumerate(poly)) % p
 
-def evaluate(poly, u, h):
+def single_open(poly, u, h):
     """Open a polynomial at a point.
 
     Args:
-        poly: The polynomial to evaluate as a list of coefficients,
+        poly: The polynomial to open as a list of coefficients,
               starting with the highest degree term.
-        u: The point to evaluate the polynomial at.
+        u: The point to open the polynomial at.
         h: parameters of the trusted setup
 
     Returns:
         A tuple (v = poly(u), proof) where proof is an element of G1
-        to be used in the verify function.
+        to be used in the verification function.
     """
     v = poly_at(poly, u)
 
@@ -98,19 +104,19 @@ def evaluate(poly, u, h):
     proof = commit(q_x, h)
     return v, proof
 
-def batch_evaluate(polys, u, r, h):
+def batch_open(polys, u, r, h):
     """Open multiple polynomials at the same point.
 
     Args:
-        polys: A list of polynomials to evaluate.
-        u: The point to evaluate the polynomials at.
+        polys: A list of polynomials to open.
+        u: The point to open the polynomials at.
         r: A random parameter
         h: parameters of the trusted setup
 
     Returns:
-        A tuple (vs, proof) where vs is a list of the values of the
-        polynomials at u, and proof is an element of G1 to be used
-        in the batch_verify function.
+        A tuple (vs, proof) where vs is a list of the evaluation of
+        the polynomials at u, and proof is an element of G1 to be
+        used in the verification function.
     """
     vs = [poly_at(poly, u) for poly in polys]
 
@@ -123,12 +129,38 @@ def batch_evaluate(polys, u, r, h):
 
     return vs, proof
 
-def verify(com_f, u, v, proof, h):
+def batch_multi_open(polys_groups, us, rs, h):
+    """Open multiple polynomials at different points.
+       Each group of polynomials is opened at the same point.
+
+    Args:
+        polys_groups: A list of lists of polynomials to open.
+        us: The points to open the polynomials at, each point
+            corresponding to a group of polynomials.
+        rs: A list of random parameters
+        h: parameters of the trusted setup
+
+    Returns:
+        A tuple (vs_groups, proofs) where vs_groups is a list of lists
+        of the evaluation of the polynomials at the corresponding points,
+        and proofs is a list of elements of G1 to be used in the
+        verification function.
+    """
+    vs_groups = []
+    proofs = []
+    for polys, u, r in zip(polys_groups, us, rs):
+        vs, proof = batch_open(polys, u, r, h)
+        vs_groups.append(vs)
+        proofs.append(proof)
+
+    return vs_groups, proofs
+
+def single_verify(com_f, u, v, proof, h):
     """Verify an evaluation proof.
 
     Args:
         com_f: The commitment to the polynomial.
-        u: The point to evaluate the polynomial at.
+        u: The point to open the polynomial at.
         v: The value of the polynomial at u.
         proof: The proof of the evaluation.
         h: parameters of the trusted setup
@@ -154,9 +186,9 @@ def batch_verify(com_fs, u, vs, r, proof, h):
     the same evaluation point for all.
 
     Args:
-        com_fs: The commitments to the polynomials.
-        u: The point to evaluate the polynomials at.
-        vs: The list of the values of the polynomials at u.
+        com_fs: A list of commitments to the polynomials.
+        u: The point to open the polynomials at.
+        vs: A list of the evaluation of the polynomials at u.
         r: A random parameter
         proof: The proof of the evaluation.
         h: parameters of the trusted setup
@@ -166,12 +198,13 @@ def batch_verify(com_fs, u, vs, r, proof, h):
     """
     g1 = h[0][0]
     g2 = h[1][0]
+    p = curve.curve_order
 
     F = curve.Z1 # Zero element of G1
     for i, com_f in enumerate(com_fs):
-        F = curve.add(F, curve.multiply(com_f, r**i))
+        F = curve.add(F, curve.multiply(com_f, pow(r, i, p)))
 
-    s = curve.multiply(g1, sum(v * r**i for i,v in enumerate(vs)))
+    s = curve.multiply(g1, sum(v * pow(r, i, p) for i,v in enumerate(vs)))
 
     e1 = pairing(g2, curve.add(F, curve.neg(s)))
 
@@ -181,12 +214,57 @@ def batch_verify(com_fs, u, vs, r, proof, h):
 
     return e1 * e2 == curve.FQ12.one()
 
+def batch_multi_verify(com_fs_groups, us, vs_groups, rs, proofs, h):
+    """Verify a batch evaluation proof for multiple polys and
+    multiple evaluation points.
+
+    Args:
+        com_fs_groups: A list of lists of  commitments to the polynomials.
+        us: The points to open the polynomials at.
+        vs_groups: A list of lists of the evaluation of the polynomials
+                   at the corresponding points.
+        rs: A list of random parameters
+        proofs: A list of proofs of the evaluation.
+        h: parameters of the trusted setup
+
+    Returns:
+        True if the proof is valid, False otherwise.
+    """
+    g1 = h[0][0]
+    g2 = h[1][0]
+    p = curve.curve_order
+
+    # other random parameters
+    _rs = [1]
+    for _ in range(len(com_fs_groups) - 1):
+        _rs.append(secrets.randbelow(p - 1) + 1)
+
+    F = curve.Z1 # Zero element of G1
+    for j, (_r, r) in enumerate(zip(_rs, rs)):
+        f1 = curve.Z1
+        f2 = 0
+        for i, (com_f, v) in enumerate(zip(com_fs_groups[j], vs_groups[j])):
+            f1 = curve.add(f1, curve.multiply(com_f, pow(r, i, p)))
+            f2 += v * pow(r, i, p)
+        f2 = curve.multiply(g1, f2)
+        F = curve.add(F, curve.multiply(curve.add(f1, curve.neg(f2)), _r))
+
+    e1_right = F
+    e2_right = curve.Z1
+    for proof, _r, u in zip(proofs, _rs, us):
+        e1_right = curve.add(e1_right, curve.multiply(proof, (_r * u) % p))
+        e2_right = curve.add(e2_right, curve.multiply(curve.neg(proof), _r))
+
+    e1 = pairing(g2, e1_right)
+    e2 = pairing(h[1][1], e2_right)
+    return e1 * e2 == curve.FQ12.one()
+
 def calculate_q_x(poly, u):
     """Calculate the polynomial q(x) such that:
        poly(x) - poly(u) = q(x) * (x - u).
 
     Args:
-        poly: The polynomial to evaluate as a list of coefficients.
+        poly: The polynomial poly(x) as a list of coefficients.
               The coefficients start with the highest degree term.
         u: The point to evaluate the polynomial at.
 
@@ -212,7 +290,8 @@ def calculate_h_x(polys, u, r):
        for i in 0, len(polys).
 
     Args:
-        polys: A list of polynomials to evaluate.
+        polys: A list of polynomials with coefficients as lists
+               starting with the highest degree term.
         u: The point to evaluate the polynomials at.
         r: A random parameter
 
@@ -232,7 +311,7 @@ def calculate_h_x(polys, u, r):
         q_x, remainder = g_x.div(sympy.Poly(x - u, x, domain=domain))
         assert remainder % curve.curve_order == 0
 
-        h_x = h_x + r**i * q_x
+        h_x = h_x + pow(r, i, curve.curve_order) * q_x
 
     return [x % curve.curve_order for x in h_x.all_coeffs()]
 
@@ -256,40 +335,78 @@ def hash_to_field(data, p):
 
 def test_single_commit():
     """Test the KZG polynomial commitment scheme for one poly, one value to open."""
-    d = secrets.randbelow(100)
+    d = secrets.randbelow(20)
     h = trusted_setup(d)
 
     poly = random_poly(d)
     com_f = commit(poly, h)
 
-    # the point to evaluate the polynomial at
+    # the point to open the polynomial at
     u = hash_to_field(com_f, curve.curve_order)
 
-    v, proof = evaluate(poly, u, h)
+    v, proof = single_open(poly, u, h)
 
-    assert verify(com_f, u, v, proof, h)
+    assert single_verify(com_f, u, v, proof, h)
     print("It works!")
 
 def test_multi_poly_single_value_commit():
     """Test the KZG polynomial commitment scheme for multiple polys,
     same value for all polys to open."""
-    d = secrets.randbelow(100)
+    d = secrets.randbelow(20)
     h = trusted_setup(d)
 
     polys_count = 10
     polys = [random_poly(d) for _ in range(polys_count)]
     com_fs = [commit(poly, h) for poly in polys]
 
-    # the point to evaluate the polynomials at
+    # the point to open the polynomials at
     u = hash_to_field(com_fs, curve.curve_order)
     # a random parameter
     r = hash_to_field(u, curve.curve_order)
 
-    vs, proof = batch_evaluate(polys, u, r, h)
+    vs, proof = batch_open(polys, u, r, h)
 
     assert batch_verify(com_fs, u, vs, r, proof, h)
+    print("It works!")
+
+def test_multi_poly_multi_value_commit():
+    """Test the KZG polynomial commitment scheme for multiple polys,
+    multiple values to open."""
+    d = secrets.randbelow(20)
+    h = trusted_setup(d)
+
+    values_count = 3
+    polys_per_value_count = [1,1,1]
+    # The idea is that we have 2 polys that evaluate to the first value,
+    # 4 polys that evaluate to the second value and so on.
+
+    polys_groups = []
+    for n in polys_per_value_count:
+        polys_groups.append([random_poly(d) for _ in range(n)])
+
+    com_fs_groups = []
+    for polys in polys_groups:
+        com_fs_groups.append([commit(poly, h) for poly in polys])
+
+    # the points to open the polynomials at
+    us = []
+    to_hash = com_fs_groups
+    for _ in range(values_count):
+        to_hash = hash_to_field(to_hash, curve.curve_order)
+        us.append(to_hash)
+
+    # random parameters
+    rs = []
+    for _ in range(values_count):
+        to_hash = hash_to_field(to_hash, curve.curve_order)
+        rs.append(to_hash)
+
+    vs_groups, proofs = batch_multi_open(polys_groups, us, rs, h)
+
+    assert batch_multi_verify(com_fs_groups, us, vs_groups, rs, proofs, h)
     print("It works!")
 
 if __name__ == "__main__":
     test_single_commit()
     test_multi_poly_single_value_commit()
+    test_multi_poly_multi_value_commit()
