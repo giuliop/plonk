@@ -1,4 +1,4 @@
-A simple implementation of KZG commitment scheme.
+A simple implementation of the Plonk zk-SNARK in Python.
 It relies on:
     * py_ecc for elliptic curve operations
     * sympy for polynomial operations
