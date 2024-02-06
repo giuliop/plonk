@@ -11,6 +11,8 @@ A circuit with n gates is represented as a list of lines, each either
       where i, j, k are numbers between 1 and 3n
 """
 
+import re
+
 def parse_file(file_path):
     """Parse the circuit source file into the vectors:
        - qL, qR, qO, qM, qC to encode the gates operations
@@ -62,40 +64,33 @@ def parse_file(file_path):
             "qC": qC, "a": a, "b": b, "c": c}
 
 def parse_line(line, n):
-    """Parse a line of the circuit source file.
+    """Parse a line of the circuit source file using regex.
 
-       A valid line has one of these two forms:
-           x_i + x_j = x_k
-           x_i * x_j = x_k
-       where i, j, k are numbers between 1 and n
+    A valid line has one of these two forms:
+        x_i + x_j = x_k
+        x_i * x_j = x_k
+    where i, j, k are numbers between 1 and 3*n
 
     Args:
         line (str): a line of the circuit source file
-        n : the number of gates in the circuit
+        n (int): the number of gates in the circuit
 
     Returns:
         a tuple (a, b, c, op) where:
         - a, b, c are the indices of the variables in the circuit
         - op is the operation of the gate
     """
-    try:
-        assert isinstance(line, str)
-        assert isinstance(n, int)
-        assert n > 0
-        elements = line.split()
-        assert len(elements) == 5
-        a, op, b, equal, c = elements
-        assert equal == "="
-        assert op in ["+", "*"]
-        assert a.startswith("x_") and b.startswith("x_") and c.startswith("x_")
-        a = int(a[2:])
-        b = int(b[2:])
-        c = int(c[2:])
-        assert 1 <= a <= 3*n
-        assert 1 <= b <= 3*n
-        assert 1 <= c <= 3*n
-    except (AssertionError, ValueError) as e:
-        raise ValueError("Invalid line format") from e
+    # Regex pattern to match the line format
+    pattern = r"x_(\d+) (\+|\*) x_(\d+) = x_(\d+)"
+    match = re.match(pattern, line)
+    if not match:
+        raise ValueError("Invalid line format")
+
+    a, op, b, c = match.groups()
+    a, b, c = int(a), int(b), int(c)
+
+    if not (1 <= a <= 3*n and 1 <= b <= 3*n and 1 <= c <= 3*n):
+        raise ValueError("Variable indices out of allowed range")
 
     return a, b, c, op
 
