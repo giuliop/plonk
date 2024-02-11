@@ -19,16 +19,16 @@ def parse_file(file_path):
        - a, b, c to encode the left, right input,output of each gate.
        so that for each gate i, we have:
            qL[i] * a[i] + qR[i] * b[i] + qO[i] * c[i] + qM[i] * a[i] * b[i] + qC[i] = 0
-        but the vectors a[i], b[i], c[i] are the indices of the variables in the circuit,
-        not the actual values.
+        (but the vectors a[i], b[i], c[i] outputted here are
+         not the actual values but the copy constraints)
 
     Args:
         file_path (str): the path to the circuit source file
 
     Returns:
         A dictionary with the following keys:
-        - n: the number of gates
-        - qL, qR, qO, qM, qC, a, b, c: the outpur vectors as lists
+        - num_gates: the number of gates
+        - qL, qR, qO, qM, qC, a, b, c: the output vectors as lists
 
     """
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -60,7 +60,7 @@ def parse_file(file_path):
         qM.append(values[3])
         qC.append(values[4])
 
-    return {"n": len(lines), "qL": qL, "qR": qR, "qO": qO, "qM": qM,
+    return {"num_gates": len(lines), "qL": qL, "qR": qR, "qO": qO, "qM": qM,
             "qC": qC, "a": a, "b": b, "c": c}
 
 def parse_line(line, n):
@@ -107,7 +107,7 @@ def test_parse_file():
         print(f"{k}: {v}")
     print()
 
-    assert output == {'n': 4, 'qL': [0, 0, 0, 1], 'qR': [0, 0, 0, 1],
+    assert output == {'num_gates': 4, 'qL': [0, 0, 0, 1], 'qR': [0, 0, 0, 1],
                       'qO': [-1, -1, -1, -1], 'qM': [1, 1, 1, 0],
                       'qC': [0, 0, 0, 0], 'a': [1, 3, 5, 2],
                       'b': [1, 3, 5, 4], 'c': [2, 4, 6, 6]}
