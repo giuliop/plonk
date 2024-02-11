@@ -1,7 +1,6 @@
 """
 An implementation of the KZG polynomial commitment scheme,
-using the py_ecc library for elliptic curve operations on
-the curve bn128.
+using the py_ecc library for elliptic curve operations.
 
 Batch proofs are implemented as per the Plonk paper, and the
 multi-polynomials, multi-value case is generalized for an
@@ -12,7 +11,11 @@ import hashlib
 import secrets
 import sympy
 
-from py_ecc.optimized_bn128 import optimized_curve as curve, pairing
+from py_ecc.optimized_bls12_381 import optimized_curve as curve, pairing
+
+# the factorization of q-1, where q is the curve order for the curve we use
+factorization = [2**32, 3, 11, 19, 10177, 125527, 859267, 906349, 906349,
+                 2508409, 2529403, 52437899, 254760293, 254760293]
 
 def trusted_setup(d):
     """Generate the trusted setup for a polynomial commitment scheme.
@@ -35,16 +38,6 @@ def trusted_setup(d):
     return ([curve.multiply(g1, pow(r, i, q)) for i in range(d+1)],
             [g2, curve.multiply(g2, r)])
 
-def random_poly(d):
-    """Generate a random polynomial of degree d.
-
-    Args:
-        d: The degree of the polynomial.
-
-    Returns:
-        A list of coefficients of the polynomial.
-    """
-    return [secrets.randbelow(curve.curve_order) for _ in range(d+1)]
 
 def commit(poly, h):
     """Commit to a polynomial.
@@ -315,17 +308,34 @@ def calculate_h_x(polys, u, r):
 
     return [x % curve.curve_order for x in h_x.all_coeffs()]
 
+# --------------------------------------------------------------- #
+# The following functions are used for testing the implementation #
+
+def random_poly(d):
+    """Generate a random polynomial of degree d.
+
+    Args:
+        d: The degree of the polynomial.
+
+    Returns:
+        A list of coefficients of the polynomial.
+    """
+    return [secrets.randbelow(curve.curve_order)
+           for _ in range(d+1)]
+
+
 def fiat_shamir(data, p):
     """Hashes data and reduces it modulo p.
 
     Args:
-        data: The data to hash as a list.
+        data: The data to hash, should be ok to
+              serialize it to a string with str().
         p: The prime number to reduce the hash to.
 
     Returns:
         An integer modulo p.
     """
-    # TODO: use a proper serialization format
+
     serialized_data = str(data).encode('utf-8')
     hasher = hashlib.blake2b(serialized_data)
     digest_bytes = hasher.digest()
@@ -333,8 +343,10 @@ def fiat_shamir(data, p):
     digest_int = int.from_bytes(digest_bytes, 'big')
     return digest_int % p
 
+
 def test_single_commit():
-    """Test the KZG polynomial commitment scheme for one poly, one value to open."""
+    """Test the KZG polynomial commitment scheme for one poly,
+    one value to open."""
     d = secrets.randbelow(20)
     h = trusted_setup(d)
 
@@ -347,6 +359,7 @@ def test_single_commit():
     v, proof = single_open(poly, u, h)
 
     assert single_verify(com_f, u, v, proof, h)
+
 
 def test_multi_poly_single_value_commit():
     """Test the KZG polynomial commitment scheme for multiple polys,
@@ -361,11 +374,12 @@ def test_multi_poly_single_value_commit():
     # the point to open the polynomials at
     u = fiat_shamir([com_fs, h], curve.curve_order)
     # a random parameter
-    r = fiat_shamir([u], curve.curve_order)
+    r = fiat_shamir(u, curve.curve_order)
 
     vs, proof = batch_open(polys, u, r, h)
 
     assert batch_verify(com_fs, u, vs, r, proof, h)
+
 
 def test_multi_poly_multi_value_commit():
     """Test the KZG polynomial commitment scheme for multiple polys,
@@ -374,9 +388,9 @@ def test_multi_poly_multi_value_commit():
     h = trusted_setup(d)
 
     values_count = 3
-    polys_per_value_count = [1,1,1]
-    # The idea is that we have 2 polys that evaluate to the first value,
-    # 4 polys that evaluate to the second value and so on.
+    polys_per_value_count = [2,4,3]
+    # The idea is that we have 2 polys that evaluate to the first
+    # value, 4 polys that evaluate to the second value and so on.
 
     polys_groups = []
     for n in polys_per_value_count:
@@ -390,18 +404,20 @@ def test_multi_poly_multi_value_commit():
     us = []
     to_hash = [com_fs_groups, h]
     for _ in range(values_count):
-        to_hash = fiat_shamir([to_hash], curve.curve_order)
+        to_hash = fiat_shamir(to_hash, curve.curve_order)
         us.append(to_hash)
 
     # random parameters
     rs = []
     for _ in range(values_count):
-        to_hash = fiat_shamir([to_hash], curve.curve_order)
+        to_hash = fiat_shamir(to_hash, curve.curve_order)
         rs.append(to_hash)
 
     vs_groups, proofs = batch_multi_open(polys_groups, us, rs, h)
 
-    assert batch_multi_verify(com_fs_groups, us, vs_groups, rs, proofs, h)
+    assert batch_multi_verify(com_fs_groups, us,
+                              vs_groups, rs, proofs, h)
+
 
 if __name__ == "__main__":
     test_single_commit()
