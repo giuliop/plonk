@@ -15,10 +15,10 @@ import re
 
 def parse_file(file_path):
     """Parse the circuit source file into the vectors:
-       - qL, qR, qO, qM, qC to encode the gates operations
+       - ql, qr, qo, qm, qc to encode the gates operations
        - a, b, c to encode the left, right input,output of each gate.
        so that for each gate i, we have:
-           qL[i] * a[i] + qR[i] * b[i] + qO[i] * c[i] + qM[i] * a[i] * b[i] + qC[i] = 0
+           ql[i] * a[i] + qr[i] * b[i] + qo[i] * c[i] + qm[i] * a[i] * b[i] + qc[i] = 0
         (but the vectors a[i], b[i], c[i] outputted here are
          not the actual values but the copy constraints)
 
@@ -28,7 +28,7 @@ def parse_file(file_path):
     Returns:
         A dictionary with the following keys:
         - num_gates: the number of gates
-        - qL, qR, qO, qM, qC, a, b, c: the output vectors as lists
+        - ql, qr, qo, qm, qc, a, b, c: the output vectors as lists
 
     """
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -36,7 +36,7 @@ def parse_file(file_path):
                  if (stripped_line := line.strip())
                     and not stripped_line.startswith("#")]
 
-    qL, qR, qO, qM, qC, a, b, c = ([] for _ in range(8))
+    ql, qr, qo, qm, qc, a, b, c = ([] for _ in range(8))
 
     op_mappings = {
             "*": (0, 0, -1, 1, 0),
@@ -54,14 +54,14 @@ def parse_file(file_path):
         c.append(c_i)
 
         values = op_mappings[op]
-        qL.append(values[0])
-        qR.append(values[1])
-        qO.append(values[2])
-        qM.append(values[3])
-        qC.append(values[4])
+        ql.append(values[0])
+        qr.append(values[1])
+        qo.append(values[2])
+        qm.append(values[3])
+        qc.append(values[4])
 
-    return {"num_gates": len(lines), "qL": qL, "qR": qR, "qO": qO, "qM": qM,
-            "qC": qC, "a": a, "b": b, "c": c}
+    return {"num_gates": len(lines), "ql": ql, "qr": qr, "qo": qo,
+            "qm": qm, "qc": qc, "a": a, "b": b, "c": c}
 
 def parse_line(line, n):
     """Parse a line of the circuit source file using regex.
@@ -107,9 +107,9 @@ def test_parse_file():
         print(f"{k}: {v}")
     print()
 
-    assert output == {'num_gates': 4, 'qL': [0, 0, 0, 1], 'qR': [0, 0, 0, 1],
-                      'qO': [-1, -1, -1, -1], 'qM': [1, 1, 1, 0],
-                      'qC': [0, 0, 0, 0], 'a': [1, 3, 5, 2],
+    assert output == {'num_gates': 4, 'ql': [0, 0, 0, 1], 'qr': [0, 0, 0, 1],
+                      'qo': [-1, -1, -1, -1], 'qm': [1, 1, 1, 0],
+                      'qc': [0, 0, 0, 0], 'a': [1, 3, 5, 2],
                       'b': [1, 3, 5, 4], 'c': [2, 4, 6, 6]}
 
 if __name__ == "__main__":

@@ -1,8 +1,28 @@
 """Some utility functions for the project"""
 
 import sympy
+import hashlib
 
-def find_nth_root(n, q, prime_factors=None):
+def fiat_shamir(data, p):
+    """Hashes data and reduces it modulo p.
+
+    Args:
+        data: The data to hash, should be ok to serialize it
+              to a string with str().
+        p: The prime number to reduce the hash to.
+
+    Returns:
+        An integer modulo p.
+    """
+
+    serialized_data = str(data).encode('utf-8')
+    hasher = hashlib.blake2b(serialized_data)
+    digest_bytes = hasher.digest()
+
+    digest_int = int.from_bytes(digest_bytes, 'big')
+    return digest_int % p
+
+def find_nth_root(n, p, prime_factors=None):
     """Return a primitive k-th root of unity modulo q so that
        k > n and k is a power of 2. Assumes q is prime.
 
@@ -19,21 +39,21 @@ def find_nth_root(n, q, prime_factors=None):
     if prime_factors is None:
         prime_factors = []
     k = 2
-    while k < q:
-        while (k < n) or (q-1) % k != 0:
+    while k < p:
+        while (k < n) or (p-1) % k != 0:
             k *= 2
-            if k > q:
+            if k > p:
                 raise ValueError("could not find suitable k")
         g = 1
-        while g < q:
+        while g < p:
             g += 1
-            assert pow(g, (q-1), q) == 1    # assume q is prime
+            assert pow(g, (p-1), p) == 1    # assume q is prime
             for d in (prime_factors):
-                if pow(g, (q-1) // d, q) == 1:
+                if pow(g, (p-1) // d, p) == 1:
                     break
             else:
-                w = pow(g, (q-1) // k, q)
-                if pow(w, k, q) == 1 and pow(w, k // 2, q) != 1:
+                w = pow(g, (p-1) // k, p)
+                if pow(w, k, p) == 1 and pow(w, k // 2, p) != 1:
                     return w, k
         k *= 2
 
@@ -82,10 +102,12 @@ def get_cosets_constants(w, H, p):
 
 def interpolate(xs, ys, p):
     """
-    Interpolate a polynomial in a finite field F_p given points (xs, ys)
+    Interpolate a polynomial in a finite field F_p given points xs and values ys).
+    xs and ys can be of different lengths, will ignore extra points/values.
+    xs shuold be unique.
 
     Args:
-        xs: List of x-coordinates of points (must be distinct).
+        xs: List of x-coordinates of points.
         ys: List of corresponding y-coordinates of points.
         p: Prime defining the finite field F_p.
 
@@ -93,6 +115,12 @@ def interpolate(xs, ys, p):
         A list of coefficients of the interpolated polynomial, starting
         from the highest degree.
     """
+    # check xs are unique
+    assert len(xs) == len(set(xs))
+
+    length = min(len(xs), len(ys))
+    xs = xs[:length]
+
     x = sympy.symbols('x')
     domain = sympy.FF(p)
     poly = sympy.Poly(0, x, domain=domain)
@@ -102,10 +130,11 @@ def interpolate(xs, ys, p):
         Li = sympy.Poly(1, x, domain=domain)
         for j, xj in enumerate(xs):
             if i != j:
-                quot, rem = sympy.Poly(x - xj, x, domain=domain).div(xi - xj)
+                quot, rem = sympy.Poly(x - xj, x, domain=domain).div(
+                    sympy.Poly(xi - xj, x, domain=domain))
                 assert rem == 0
                 Li *= quot
 
-        poly += ys[i] * Li
+        poly += sympy.Poly(ys[i] * Li, x, domain=domain)
 
     return [x % p for x in poly.all_coeffs()]

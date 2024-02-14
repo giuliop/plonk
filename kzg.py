@@ -44,16 +44,20 @@ def commit(poly, h):
 
     Args:
         poly: The polynomial to commit to as a list of coefficients,
-        starting from the highest degree.
+        starting from the highest degree, or as a sympy Poly.
         h: parameters of the trusted setup
 
     Returns:
         The commitment to the polynomial, a point in G1.
     """
+    if isinstance(poly, sympy.Poly):
+        poly = [x % curve.curve_order for x in poly.all_coeffs()]
+
     degree = len(poly) - 1
     com_f = curve.Z1 # Zero element of G1
 
     for i, pi in enumerate(poly):
+        pi = pi % curve.curve_order
         d = degree - i
         com_f = curve.add(com_f, curve.multiply(h[0][d], pi))
 
@@ -269,7 +273,7 @@ def calculate_q_x(poly, u):
     domain = sympy.FF(curve.curve_order)
 
     f_x = sympy.Poly(poly, x, domain=domain)
-    f_u = f_x.subs(x, u)
+    f_u = sympy.Poly(f_x.subs(x, u), x, domain=domain)
     g_x = f_x - f_u
 
     q_x, remainder = g_x.div(sympy.Poly(x - u, x, domain=domain))
@@ -298,7 +302,7 @@ def calculate_h_x(polys, u, r):
     h_x = sympy.Poly(0, x, domain=domain)
     for i, poly in enumerate(polys):
         f_x = sympy.Poly(poly, x, domain=domain)
-        f_u = f_x.subs(x, u)
+        f_u = sympy.Poly(f_x.subs(x, u), x, domain=domain)
         g_x = f_x - f_u
 
         q_x, remainder = g_x.div(sympy.Poly(x - u, x, domain=domain))
