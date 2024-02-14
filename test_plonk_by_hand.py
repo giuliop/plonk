@@ -1,7 +1,7 @@
-"""Let's replicate the wonderful plonk example in the series:
+"""Let's replicate the wonderful plonk example in the series below up to
+   the Prover:
    https://research.metastate.dev/plonk-by-hand-part-1/
    https://research.metastate.dev/plonk-by-hand-part-2-the-proof/
-   https://research.metastate.dev/plonk-by-hand-part-3-verification/
 
    The plonk paper can be found at:
    https://eprint.iacr.org/2019/953.pdf
@@ -278,9 +278,6 @@ def test_plonk_by_hand():
     proof = (com_A, com_B, com_C, com_Z, com_Tlo, com_Tmid, com_Thi, com_Wzeta,
              com_Wzeta_w, a_, b_, c_, s1_, s2_, r_, zw_)
 
-    ##########             VERIFIER                ##########
-
-    u = 4   # random challenge from the verifier
 
 def print_poly(p):
     """Take a Poly expression and print its coefficients starting
