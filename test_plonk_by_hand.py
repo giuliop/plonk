@@ -85,9 +85,7 @@ def test_plonk_by_hand():
 
     x = sympy.symbols('x')
 
-    coeff_Zh = [1] + [0] * (len(H) - 1) + [-1]
-    Zh = Poly(coeff_Zh)
-    assert Zh == Poly(x**4 - 1)
+    Zh = Poly(x**n - 1)
 
     randoms = [7, 4, 11, 12, 16, 2]
 
@@ -158,23 +156,27 @@ def test_plonk_by_hand():
 
     T1 = A * B * QM + A * QL + B * QR + C * QO + PI + QC
 
-    T2 = Poly(alfa * ((A + beta * x + gamma) * (B + beta * k1 * x + gamma)
-                    * (C + beta * k2 * x + gamma) * Z))
+    T2 = Poly(alfa * ((A + beta * x + gamma)
+                      * (B + beta * k1 * x + gamma)
+                      * (C + beta * k2 * x + gamma)
+                      * Z))
 
-    T3 = Poly(-1 * alfa * ((A + beta * S1 + gamma) * (B + beta * S2 + gamma)
-                   * (C + beta * S3 + gamma) * Zw))
+    T3 = Poly(-alfa * ((A + beta * S1 + gamma)
+                       * (B + beta * S2 + gamma)
+                       * (C + beta * S3 + gamma)
+                       * Zw))
 
     T4 = Poly(alfa**2 * ((Z - 1) * L1))
 
-    T = T1 + T2 + T3 + T4
+    T_num = T1 + T2 + T3 + T4
 
     assert [x % q for x in T1.all_coeffs()] == [9, 7, 8, 9, 5, 10, 5, 3, 3, 16, 4, 5, 0, 1]
     assert [x % q for x in T2.all_coeffs()] == [14, 14, 2, 15, 8, 16, 16, 4, 12, 1, 12, 12, 7, 8, 13, 10, 0, 3, 12, 1, 1, 0]
     assert [x % q for x in T3.all_coeffs()] == [14, 10, 0, 1, 4, 9, 0, 7, 9, 12, 4, 16, 2, 7, 2, 9, 11, 9, 7, 10, 3, 13]
     assert [x % q for x in T4.all_coeffs()] == [14, 8, 15, 12, 6, 0, 2, 5, 14, 9]
-    assert [x % q for x in T.all_coeffs()] == [11, 7, 2, 16, 12, 8, 16, 11, 13, 3, 7, 3, 11, 16, 1, 0, 3, 11, 8, 4, 1, 6]
+    assert [x % q for x in T_num.all_coeffs()] == [11, 7, 2, 16, 12, 8, 16, 11, 13, 3, 7, 3, 11, 16, 1, 0, 3, 11, 8, 4, 1, 6]
 
-    T, rem = T.div(Zh)
+    T, rem = T_num.div(Zh)
     assert rem == 0
 
     assert [x % q for x in T.all_coeffs()] == [11, 7, 2, 16, 6, 15, 1, 10, 2, 1, 8, 13, 13, 0, 9, 13, 16, 11]
@@ -226,7 +228,7 @@ def test_plonk_by_hand():
     pi_ = PI.subs(x, zeta) % q
 
     l1_ = L1.subs(x, zeta) % q
-    zh_ = Zh.subs(x, zeta) % q
+    # zh_ = Zh.subs(x, zeta) % q
     Tlo = Poly(Tlo_coeff)
     Tmid = Poly(Tmid_coeff)
     Thi = Poly(Thi_coeff)
