@@ -37,7 +37,7 @@ def test_plonk_by_hand():
        just copy the results of those."""
 
     ##########                SETUP                ##########
-    circuit = cc.parse_file('circuit_example')
+    circuit = cc.parse_file('circuits/pythagoras_abc_private')
 
     w = 4   # generator of order 4 in p
     k1, k2 = 2, 3  # to generate the cosets from the generator w
