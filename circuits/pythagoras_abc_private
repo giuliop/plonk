@@ -1,5 +1,6 @@
 # A simple circuit expressing the Pythagorean equation
-# x^2 + y^2 = z^2
+# a^2 + b^2 = c^2
+# where a, b, c, are all private inputs
 
 x_1 * x_1 = x_2
 x_3 * x_3 = x_4

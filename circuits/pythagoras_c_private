@@ -1,0 +1,10 @@
+# A simple circuit expressing the Pythagorean equation
+# a^2 + b^2 = c^2
+# where a, b are public inputs and c is a private input
+
+public x_1
+public x_2
+x_1 * x_1 = x_3
+x_2 * x_2 = x_4
+x_5 * x_5 = x_6
+x_3 + x_4 = x_6

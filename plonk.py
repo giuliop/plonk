@@ -42,7 +42,7 @@ def run_setup(circuit_filepath):
         - generators: a dict with the generators parameters for polynomial
                       interpolation: w, w_order, k1, k2, H, H1, H2
     """
-    circuit = cc.parse_file(circuit_filepath)
+    circuit = cc.parse_file(circuit_filepath, padding=True)
     n = circuit['num_gates']
     q = kzg.curve.curve_order
     gp = kzg.trusted_setup(n + 5)
@@ -422,7 +422,7 @@ def verify_proof(preprocessed, public_inputs, proof):
     l1_ = sympy.Mod(1 * Zh_ * sympy.mod_inverse(n * (zeta - 1), q), q)
 
     x = sympy.symbols('x')
-    PI = Poly(utils.interpolate(H, public_inputs, q))
+    PI = Poly(utils.interpolate(H, [-x for x in public_inputs], q))
     pi_ = PI.subs(x, zeta) % q
 
     r0_ = sympy.Mod((pi_
@@ -492,7 +492,9 @@ def verify_proof(preprocessed, public_inputs, proof):
 
 
 def test():
-    setup = run_setup('circuit_example')
+    # Test with no public inputs
+    setup = run_setup('circuits/pythagoras_abc_private')
+    preprocessed = verifier_preprocess(setup)
 
     left = [3, 4, 5, 9]
     right = [3, 4, 5, 16]
@@ -500,10 +502,20 @@ def test():
     trace = {'left': left, 'right': right, 'output': output}
 
     public_inputs = []
+    proof = generate_proof(setup, public_inputs, trace)
+    assert verify_proof(preprocessed, public_inputs, proof)
+
+    # Test with public inputs
+    setup = run_setup('circuits/pythagoras_c_private')
+    preprocessed = verifier_preprocess(setup)
+
+    public_inputs = [3, 4, 0, 0, 0, 0, 0, 0]
+    left = [3, 4, 3, 4, 5, 9, 0, 0]
+    right = [0, 0, 3, 4, 5, 16, 0, 0]
+    output = [3, 4, 9, 16, 25, 25, 0, 0]
+    trace = {'left': left, 'right': right, 'output': output}
 
     proof = generate_proof(setup, public_inputs, trace)
-
-    preprocessed = verifier_preprocess(setup)
     assert verify_proof(preprocessed, public_inputs, proof)
 
 
