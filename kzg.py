@@ -25,7 +25,7 @@ def trusted_setup(d):
 
     Returns:
         A tuple with the general parameters of the trusted setup:
-        1) a list of g1 * (r^i) for i in 0,d
+        1) the list [g1, g1 * r, g1 * r^2, ..., g1 * r^d]
         2) the list [g2, g2 * r]
         where r is a random number
 
