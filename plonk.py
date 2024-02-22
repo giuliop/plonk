@@ -16,6 +16,7 @@ def Poly(expr):
     Args:
         expr: a list of coefficients starting from highest degree or
               a sympy expression with the symbol x (e.g., x**2 - 1)
+
     Returns:
         A sympy Poly built from expr
     """
@@ -24,6 +25,7 @@ def Poly(expr):
         return sympy.Poly(expr, sympy.symbols('x'), domain=domain)
     return sympy.Poly(expr, domain=domain)
 
+
 def run_setup(circuit_filepath):
     """Preprocess the circuit and generate all the common input for the
        prover and the verifier.
@@ -31,6 +33,7 @@ def run_setup(circuit_filepath):
     Args:
         circuit_file: path of the file containing the circuit description
                       in a format parseable by the circuit_compiler module
+
     Returns:
         A dict with the the common preprocessed input for prover and verifier:
         - gp: the trusted setup paramenters of the KZG commitment scheme
@@ -122,9 +125,6 @@ def generate_proof(setup, public_inputs, trace):
         public_inputs: A list with the public inputs for the proof
         trace: a dict with fields 'left', 'right', 'output' as lists
                of the inputs and outputs values of the gates
-        H: a list of the evaluation points
-        H1: a list of the first coset of the evaluation points
-        H2: a list of the second coset of the evaluation points
 
     Returns:
         A proof object that can be verified by the verifier

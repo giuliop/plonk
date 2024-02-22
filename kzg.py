@@ -16,6 +16,11 @@ from py_ecc.optimized_bls12_381 import optimized_curve as curve, pairing
 # the factorization of q-1, where q is the curve order for the curve we use
 factorization = [2**32, 3, 11, 19, 10177, 125527, 859267, 906349, 906349,
                  2508409, 2529403, 52437899, 254760293, 254760293]
+q_1 = 1
+for f in factorization:
+    q_1 *= f
+assert q_1 == curve.curve_order - 1
+
 
 def trusted_setup(d):
     """Generate the trusted setup for a polynomial commitment scheme.

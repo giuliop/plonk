@@ -82,6 +82,7 @@ def parse_file(file_path, padding=True):
     return {"num_gates": n, "ql": ql, "qr": qr, "qo": qo,
             "qm": qm, "qc": qc, "a": a, "b": b, "c": c}
 
+
 def parse_line(line, n):
     """Parse a line of the circuit source file.
 
@@ -127,6 +128,7 @@ def parse_line(line, n):
 
     return a, b, c, op
 
+
 def next_power_of_2(n):
     # If n is already a power of 2, return n
     if n and not (n & (n - 1)):
@@ -137,6 +139,7 @@ def next_power_of_2(n):
 
     # Construct the next power of 2 using left shift
     return 1 << msb_pos
+
 
 def test_parse_file():
     """Test the parse_file function."""
